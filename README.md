@@ -3,6 +3,6 @@ TODO: Fiyat arttırıp azaltma trendlerini database e atıp incelemek, belki de 
 
 Run
 ---
-npm install jsdom
-node fetch 
-nodejs fetch # if using newer nodejs
+	npm install jsdom
+	node fetch 
+	nodejs fetch # if using newer nodejs
