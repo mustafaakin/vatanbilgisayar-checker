@@ -1,53 +1,79 @@
-var async = require("async");
 var request = require("request");
-var jsdom = require('jsdom');
+var jsdom = require("jsdom");
+var fs = require("fs");
+var path = require("path");
+var colors = require("colors");
+var jquery = fs.readFileSync("./jquery.js", "utf-8");
 
-function getItems(page,cb){
-	var url = 'http://www.vatanbilgisayar.com/Notebook-Netbook-Tablet/products.aspx?L2=PC_POR';
-	if ( page > 0) {
-		url = url + "&rcd=" + (16 * page + 1);
+var prefix = "http://www.vatanbilgisayar.com";
+
+var visitedCategories = {};
+
+function parse(url, cb) {
+	request({
+		uri: prefix + url,
+		headers: {
+			'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/34.0.1847.132 Safari/537.36'
+		}
+	}, function(error, response, body) {
+		console.log("[INFO]".red, "Downloaded".cyan, url.blue);
+		jsdom.env({
+			html: body,
+			src: [jquery],
+			done: function(errors, window) {
+				var $ = window.$;
+				cb($);
+			}
+		});
+	});
+}
+
+
+function getProducts($) {
+	$(".product").each(function() {
+		var a = $(this);
+		var l = a.find(".prdName>a");
+		var name = l.text().trim();
+		var link = l.attr("href");
+		var price = a.find(".urunListe_satisFiyat").text().trim();
+		console.log( (new Date()).toISOString(), name, link, price.red);
+	});
+}
+
+parse("/", function($) {
+	console.log("[INFO]".red, "Reading main page".red);
+	var cats = [];
+
+	$(".catList>ul>li>a").each(function() {
+		cats.push({
+			title: $(this).text().trim(),
+			url: $(this).attr("href"),
+		});		
+	});
+
+	for(var i = 0; i < cats.length; i++){
+		visitCategory(cats[i].url, 0);
 	}
-	console.log(url);
-	jsdom.env(url, function(err, window){
-		var links = [];
-    	for ( var i = 0; i < 16; i++){
-    		var index = i < 10 ? ('0' + i) : i;
-    		var id = "ctl00_ContentPlaceHolder1_dlProduct_ctl" + index + "_lbtnTitle";
-	    	var link = window.document.getElementById(id);	    
-	    	if ( link && link.href){
-	    		links.push(link.href);
-	    	}
-    	}
-    	cb(links);
+
+	getProducts($);
+});
+
+
+function visitCategory(category, page) {
+	if ( visitedCategories[category] )
+		return;
+
+	console.log("[INFO]".red, "Visiting category".blue, category.blue);
+	parse(category, function($) {
+		if ( page == 0){
+			// Find out the paging			
+			$(".paging").each(function(){
+				var href = $(this).attr("href");
+				if ( href){
+					visitCategory(href, 1);
+				}
+			});
+		}
+		getProducts($);
 	});
 }
-
-function getPrice(link,cb){
-	jsdom.env(link, function(err,window){
-		var marka = window.document.getElementById("ctl00_ContentPlaceHolder1_lblMarka").innerHTML;
-		var model = window.document.getElementById("ctl00_ContentPlaceHolder1_lblTitle").innerHTML;
-		var inputs, index;
-		inputs = window.document.getElementsByTagName('input');
-		var prices = [];
-		for (index = 0; index < inputs.length; ++index) {
-			var k = inputs[index];
-			if ( k.name && k.name.match("hfFiyat")){
-				prices.push(Math.ceil(k.value.replace(",",".")));
-			};
-		}
-		prices = prices.sort();
-		console.log(prices[0] + "\t" + marka + "\t\t" + model);
-		// var k = a.match(/\b\d+.*\d+ TL/g);
-		// console.log(k);
-	});				
-}
-
-for ( var i = 0; i < 1; i++){
-	getItems(i, function(links){
-		for ( var j in links){
-			var link = links[j];
-			getPrice(link,null);
-		}
-	});
-}
-
